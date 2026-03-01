@@ -531,7 +531,7 @@ export default function Home() {
                             onChange={(e) => setNewTaskInputs(prev => ({ ...prev, [list.id]: e.target.value }))}
                             onKeyPress={(e) => e.key === 'Enter' && addTask(list.id)}
                             placeholder="新しいタスクを入力..."
-                            className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder:text-gray-500"
+                            className="flex-1 px-3 py-2 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder:text-gray-500"
                           />
                           <button
                             onClick={() => addTask(list.id)}
