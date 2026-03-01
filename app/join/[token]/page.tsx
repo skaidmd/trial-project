@@ -60,7 +60,7 @@ export default function JoinTaskListPage() {
 
       if (existingMember) {
         setStatus('success');
-        setMessage('既にこのリストのメンバーです！');
+        setMessage('既にこのやることリストのメンバーです！');
         setTimeout(() => router.push('/'), 2000);
         return;
       }
@@ -78,12 +78,12 @@ export default function JoinTaskListPage() {
       if (joinError) {
         console.error('参加エラー:', joinError);
         setStatus('error');
-        setMessage('リストへの参加に失敗しました');
+        setMessage('やることリストへの参加に失敗しました');
         return;
       }
 
       setStatus('success');
-      setMessage('リストに参加しました！');
+        setMessage('やることリストに参加しました！');
       
       // 2秒後にホームへリダイレクト
       setTimeout(() => router.push('/'), 2000);
@@ -103,7 +103,7 @@ export default function JoinTaskListPage() {
             <>
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-gray-800 mx-auto mb-4"></div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                リストに参加中...
+                やることリストに参加中...
               </h1>
               <p className="text-gray-600">
                 しばらくお待ちください

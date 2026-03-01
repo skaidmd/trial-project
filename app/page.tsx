@@ -395,7 +395,7 @@ export default function Home() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-2xl font-bold text-gray-900">家族のToDo</h1>
+            <h1 className="text-2xl font-bold text-gray-900">連絡帳</h1>
             <button
               onClick={handleLogout}
               className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
@@ -418,7 +418,7 @@ export default function Home() {
                 : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            📋 マイタスクリスト
+            📋 マイやることリスト
           </button>
           <button
             onClick={() => setActiveTab('shared')}
@@ -428,7 +428,7 @@ export default function Home() {
                 : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            👥 共有タスクリスト
+            👥 共有やることリスト
           </button>
         </div>
 
@@ -440,7 +440,7 @@ export default function Home() {
         ) : filteredLists.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm p-8 text-center mb-4">
             <p className="text-lg text-gray-400 mb-2">
-              {activeTab === 'my' ? 'タスクリストがありません' : '共有されているリストがありません'}
+              {activeTab === 'my' ? 'やることリストがありません' : '共有されているリストがありません'}
             </p>
             <p className="text-sm text-gray-400">
               {activeTab === 'my' ? '下のボタンから新しいリストを作成してください' : '誰かがリストを共有するまで待ちましょう'}
@@ -530,7 +530,7 @@ export default function Home() {
                             value={newTaskInputs[list.id] || ''}
                             onChange={(e) => setNewTaskInputs(prev => ({ ...prev, [list.id]: e.target.value }))}
                             onKeyPress={(e) => e.key === 'Enter' && addTask(list.id)}
-                            placeholder="新しいタスクを入力..."
+                            placeholder="新しいやることを入力..."
                             className="flex-1 px-3 py-2 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder:text-gray-500"
                           />
                           <button
@@ -545,7 +545,7 @@ export default function Home() {
                       {/* タスクリスト */}
                       {tasks.length === 0 ? (
                         <div className="p-4 text-center text-gray-400 text-sm">
-                          タスクがありません
+                          やることがありません
                         </div>
                       ) : (
                         <ul className="divide-y divide-gray-100">
@@ -604,7 +604,7 @@ export default function Home() {
                   value={newListName}
                   onChange={(e) => setNewListName(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && createNewList()}
-                  placeholder="新しいリスト名..."
+                  placeholder="新しいやることリスト名..."
                   autoFocus
                   className="flex-1 px-4 py-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder:text-gray-500"
                 />
@@ -632,7 +632,7 @@ export default function Home() {
                 <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                   <path d="M12 4v16m8-8H4"></path>
                 </svg>
-                新規タスクリストを追加
+                新規やることリストを追加
               </button>
             )}
           </div>
@@ -644,7 +644,7 @@ export default function Home() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShareModalListId(null)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">リストを共有</h2>
+              <h2 className="text-xl font-bold text-gray-900">やることリストを共有</h2>
               <button onClick={() => setShareModalListId(null)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                   <path d="M6 18L18 6M6 6l12 12"></path>
@@ -653,7 +653,7 @@ export default function Home() {
             </div>
 
             <p className="text-gray-600 mb-4 text-sm">
-              このリンクをLINEやメッセージで送信すると、相手がこのリストに参加できます。
+              このリンクをLINEやメッセージで送信すると、相手がこのやることリストに参加できます。
             </p>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
