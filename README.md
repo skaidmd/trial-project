@@ -6,12 +6,13 @@
 
 - 🔐 **セキュアな認証**: メールアドレスとパスワードによる認証
 - 📱 **モバイルファースト**: スマートフォンでの片手操作に最適化
-- 🏷️ **カテゴリ管理**: 「お使い」「イベント」「その他」でタスクを整理
-- 🔄 **リアルタイム同期**: 家族全員のタスクがリアルタイムに同期
-- 🔒 **RLS（Row Level Security）**: グループベースの強固なアクセス制御
-- 🔗 **シンプルな共有**: リンクを送るだけで家族を招待（メール招待不要）
-- 👥 **グループ管理**: 複数メンバーでタスクを共有
+- 📋 **リストベース管理**: 用途ごとに複数のタスクリストを作成
+- 🔄 **リアルタイム同期**: タスクがリアルタイムに同期
+- 🔒 **RLS（Row Level Security）**: リストベースの強固なアクセス制御
+- 🔗 **シンプルな共有**: リンクを送るだけでリストを共有（メール招待不要）
+- 👥 **柔軟な共有**: 必要なリストだけを必要な人に共有
 - ⚡ **楽観的UI**: 操作後すぐに結果が反映される快適なUX
+- 📂 **アコーディオン式UI**: リストを展開/折りたたみして見やすく管理
 
 ## セットアップ手順
 
@@ -47,32 +48,32 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
 Supabaseのダッシュボードで、SQL Editorを開き、以下の順序でSQLを実行してください:
 
-#### 4-1. 基本スキーマ（初回セットアップ）
+#### 4-1. 新規セットアップ（初めて構築する場合）
 
 1. Supabaseダッシュボード → SQL Editor
-2. `schema.sql`の内容をコピー&ペースト
+2. `pivot_to_lists.sql`の内容をコピー&ペースト
 3. 「Run」をクリックして実行
-
-これにより、`tasks`テーブルが作成されます。
-
-#### 4-2. グループ共有機能（マイグレーション）
-
-**重要**: 既存のアプリを使用している場合は、このマイグレーションを実行してください。
-
-1. SQL Editorで新しいクエリを開く
-2. `migration_groups.sql`の内容をコピー&ペースト
-3. 「Run」をクリックして実行
-4. 最後に以下のコマンドを実行して、既存ユーザーをマイグレート:
-
-```sql
-SELECT migrate_existing_users_to_groups();
-```
 
 これにより、以下が作成されます:
-- `groups`テーブル（グループ情報）
-- `group_members`テーブル（メンバーシップ）
-- `invite_tokens`テーブル（招待リンク）
-- グループベースのRLSポリシー
+- `task_lists`テーブル（タスクリスト情報）
+- `task_list_members`テーブル（リストメンバーシップ）
+- `tasks`テーブル（タスク情報）
+- リストベースのRLSポリシー
+
+#### 4-2. 既存アプリからの移行（旧バージョンから更新する場合）
+
+**重要**: 既に旧バージョンのアプリを使用している場合は、このマイグレーションを実行してください。
+
+1. SQL Editorで新しいクエリを開く
+2. `pivot_to_lists.sql`の内容をコピー&ペースト
+3. 「Run」をクリックして実行
+4. 最後に以下のコマンドを実行して、既存データをマイグレート:
+
+```sql
+SELECT migrate_categories_to_lists();
+```
+
+これにより、既存の「お使い」「イベント」「その他」カテゴリが自動的に個別のタスクリストに変換されます。
 
 ### 5. 開発サーバーの起動
 
@@ -90,143 +91,172 @@ npm run dev
 2. 「新規登録」をクリック
 3. メールアドレスとパスワードを入力して登録
 4. 確認メールが届くので、リンクをクリックして認証を完了
-5. 初回ログイン時に自動的にグループが作成されます
 
-### タスクの管理
+### タスクリストの管理
 
-- **追加**: カテゴリを選択し、タスク名を入力して「追加」ボタンをクリック
-- **完了**: チェックボックスをタップして完了/未完了を切り替え
-- **削除**: ゴミ箱アイコンをタップしてタスクを削除
+#### リストの作成
+1. 「マイタスクリスト」タブを選択
+2. 「➕ 新規タスクリストを追加」ボタンをクリック
+3. リスト名を入力して「作成」ボタンをクリック
 
-### 家族との共有（シンプルなリンク共有）
+#### リストの共有
+1. 共有したいリストの「共有」アイコンをクリック
+2. 表示された招待リンクをコピー
+3. LINEやメッセージで家族に送信
+4. 受け取った人がリンクをクリックするとリストに参加できます
 
-**Step 1: 共有リンクを生成**
-1. ヘッダーの「共有」ボタンをクリック
-2. 「リンクをコピー」ボタンで共有リンクをコピー
+#### タスクの管理
+1. リストをクリックして展開
+2. **追加**: タスク名を入力して「追加」ボタンをクリック
+3. **完了**: チェックボックスをタップして完了/未完了を切り替え
+4. **削除**: ×アイコンをタップしてタスクを削除
 
-**Step 2: 家族に送信**
-3. LINEやメッセージアプリでリンクを送信
-4. 受け取った家族がリンクをタップ
+### リストの切り替え
 
-**Step 3: 自動参加**
-5. 家族が自動的にグループに参加
-6. 全員で同じタスクを共有・リアルタイム同期
+- **マイタスクリスト**: 自分が作成したリストが表示されます
+- **共有タスクリスト**: 共有されているリストが表示されます
 
-**特徴:**
-- ✅ メール招待不要
-- ✅ 複雑な設定なし
-- ✅ リンクをタップするだけで完了
-- ✅ 招待リンクは30日間有効
-- ✅ 何人でも招待可能
-
-### 家族での共有（従来の方法）
-
-現在の実装では、各ユーザーが自分のタスクのみを管理できます。家族全員でタスクを共有したい場合は、以下の方法があります:
-
-1. **同じアカウントでログイン**: 全員が同じメールアドレス/パスワードでログイン
-2. **カスタマイズ**: RLSポリシーを変更して、特定のグループ内でタスクを共有
+リンクを発行したリストは「共有タスクリスト」タブに表示されます（共有アイコン👥付き）。
 
 ## 技術スタック
 
-- **フロントエンド**: Next.js 15 (App Router), React, TypeScript
-- **スタイリング**: Tailwind CSS
-- **バックエンド**: Supabase (PostgreSQL, Authentication, Realtime)
+- **フロントエンド**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS
+- **バックエンド**: Supabase (PostgreSQL, Realtime, Auth)
 - **認証**: Supabase Auth
-- **データベース**: PostgreSQL with Row Level Security
+- **データベース**: PostgreSQL with Row Level Security (RLS)
+- **デプロイ**: Vercel
 
-## プロジェクト構成
+## プロジェクト構造
 
 ```
 .
 ├── app/
-│   ├── page.tsx          # メインのToDoリスト画面
+│   ├── page.tsx              # メイン画面（タスクリスト一覧）
 │   ├── login/
-│   │   └── page.tsx      # ログイン/新規登録画面
-│   └── layout.tsx
+│   │   └── page.tsx          # ログイン・新規登録画面
+│   └── join/
+│       └── [token]/
+│           └── page.tsx      # リスト参加画面
 ├── src/
 │   └── utils/
-│       └── supabase/     # Supabaseクライアント
-│           ├── client.ts    # クライアント側
-│           ├── server.ts    # サーバー側
-│           └── middleware.ts # ミドルウェア用
-├── middleware.ts         # 認証チェック
-├── schema.sql            # データベーススキーマ
-└── .env.local.example    # 環境変数テンプレート
+│       └── supabase/
+│           ├── client.ts     # クライアント側のSupabaseクライアント
+│           ├── server.ts     # サーバー側のSupabaseクライアント
+│           └── middleware.ts # ミドルウェア用のSupabaseクライアント
+├── middleware.ts             # 認証ミドルウェア
+├── pivot_to_lists.sql        # リストベースのデータベーススキーマとマイグレーション
+└── .env.local                # 環境変数（gitignore対象）
 ```
 
-## デプロイ
+## Vercelへのデプロイ
 
-### Vercelへのデプロイ
+### 1. Vercelプロジェクトの作成
 
-#### 1. GitHubにプッシュ
-
-```bash
-git add .
-git commit -m "Add Supabase integration"
-git push origin main
-```
-
-#### 2. Vercelでプロジェクトをインポート
-
-1. [Vercel](https://vercel.com)にアクセス
+1. [Vercel](https://vercel.com)にログイン
 2. 「Add New...」→「Project」をクリック
-3. GitHubリポジトリを選択してインポート
+3. GitHubリポジトリをインポート
+4. プロジェクト名を設定
 
-#### 3. 環境変数を設定（重要！）
+### 2. 環境変数の設定
 
-デプロイ前に、以下の環境変数を設定してください：
+デプロイ設定画面で「Environment Variables」セクションに以下を追加:
 
-1. Vercelのプロジェクト設定画面で「Settings」→「Environment Variables」を開く
-2. 以下の環境変数を追加:
+- `NEXT_PUBLIC_SUPABASE_URL`: SupabaseプロジェクトのURL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: SupabaseのAnon Key
 
-| Name | Value |
-|------|-------|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://your-project.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `your-anon-key` |
+**重要**: これらの環境変数を設定しないと、ビルドが失敗します。
 
-**⚠️ 注意**: これらの環境変数を設定しないと、ビルドエラーが発生します。
+### 3. デプロイ
 
-3. 環境変数の適用範囲を選択:
-   - ✅ Production
-   - ✅ Preview
-   - ✅ Development
+「Deploy」ボタンをクリックしてデプロイを開始します。
 
-#### 4. デプロイ
+### 4. デプロイ後の動作確認
 
-「Deploy」ボタンをクリックすると、自動的にビルドとデプロイが開始されます。
-
-#### 5. デプロイ後の設定
-
-デプロイが完了したら、SupabaseのダッシュボードでリダイレクトURLを設定してください:
-
-1. Supabaseダッシュボード → Authentication → URL Configuration
-2. 「Site URL」にVercelのURL（例: `https://your-app.vercel.app`）を設定
-3. 「Redirect URLs」に以下を追加:
-   - `https://your-app.vercel.app/**`
-   - `http://localhost:3000/**`（開発用）
+1. デプロイ完了後、提供されたURLにアクセス
+2. `/login`でアカウントを作成
+3. タスクリストを作成してタスクを追加
+4. 共有リンクを発行して別のアカウントでアクセスし、共有機能をテスト
 
 ### トラブルシューティング
 
-#### ビルドエラー: "Your project's URL and API key are required"
+#### ビルドエラー: "Supabase URL and API key are required"
 
 **原因**: 環境変数が設定されていません。
 
 **解決方法**:
-1. Vercelの「Settings」→「Environment Variables」で環境変数を追加
-2. 「Deployments」タブから最新のデプロイを選択し、「Redeploy」をクリック
+1. Vercelダッシュボード → プロジェクト → Settings → Environment Variables
+2. `NEXT_PUBLIC_SUPABASE_URL`と`NEXT_PUBLIC_SUPABASE_ANON_KEY`を追加
+3. 「Redeploy」をクリックして再デプロイ
 
-#### 新規登録後に確認メールが届かない
+#### ログイン後に「読み込み中...」のまま動かない
 
-**原因**: Supabaseのメール設定が完了していません。
+**原因**: データベースのRLSポリシーが正しく設定されていない可能性があります。
 
-**解決方法（開発環境）**:
-1. Supabaseダッシュボード → Authentication → Providers → Email
-2. 「Confirm email」をオフにする（開発環境のみ）
+**解決方法**:
+1. Supabase SQL Editorで`pivot_to_lists.sql`を再実行
+2. RLSが有効化されていることを確認:
 
-**解決方法（本番環境）**:
-1. Supabaseダッシュボード → Project Settings → Auth
-2. カスタムSMTPを設定するか、Supabaseのデフォルトメール機能を使用
+```sql
+SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public';
+```
+
+#### 共有リンクが機能しない
+
+**原因**: `task_lists`テーブルの`invite_token`が生成されていない、またはRLSポリシーの問題です。
+
+**解決方法**:
+1. ブラウザのコンソールでエラーを確認
+2. Supabase → Authentication → Policies で`task_lists`と`task_list_members`のポリシーを確認
+3. 必要に応じて`pivot_to_lists.sql`を再実行
+
+## データベース構造
+
+### task_lists（タスクリスト）
+
+| カラム名 | 型 | 説明 |
+|---------|---|------|
+| id | uuid | 主キー |
+| name | text | リスト名 |
+| owner_id | uuid | オーナーのユーザーID |
+| is_shared | boolean | 共有フラグ |
+| invite_token | text | 招待用トークン |
+| created_at | timestamp | 作成日時 |
+
+### task_list_members（リストメンバー）
+
+| カラム名 | 型 | 説明 |
+|---------|---|------|
+| id | uuid | 主キー |
+| task_list_id | uuid | タスクリストID |
+| user_id | uuid | ユーザーID |
+| user_email | text | ユーザーのメールアドレス |
+| role | text | ロール（owner/member） |
+| joined_at | timestamp | 参加日時 |
+
+### tasks（タスク）
+
+| カラム名 | 型 | 説明 |
+|---------|---|------|
+| id | uuid | 主キー |
+| title | text | タスク名 |
+| task_list_id | uuid | 所属するタスクリストID |
+| is_completed | boolean | 完了フラグ |
+| user_id | uuid | 作成者のユーザーID |
+| created_at | timestamp | 作成日時 |
+
+## セキュリティ
+
+このアプリケーションは、Supabaseの **Row Level Security (RLS)** を使用して、以下のセキュリティを実現しています:
+
+- ユーザーは自分が作成した、または参加しているタスクリストのみを閲覧・編集できます
+- タスクは所属するリストのメンバーのみがアクセス可能です
+- リストのオーナーのみが招待リンクを生成できます
+- すべてのデータベースアクセスはRLSポリシーによって保護されています
 
 ## ライセンス
 
 MIT
+
+## サポート
+
+問題が発生した場合は、GitHubのIssuesセクションで報告してください。

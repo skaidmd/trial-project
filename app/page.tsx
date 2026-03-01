@@ -7,39 +7,56 @@ import { useRouter } from 'next/navigation';
 interface Task {
   id: string;
   title: string;
-  category: string;
   is_completed: boolean;
   user_id: string;
-  group_id: string;
+  task_list_id: string;
   created_at: string;
 }
 
-interface GroupMember {
+interface TaskList {
+  id: string;
+  name: string;
+  owner_id: string;
+  is_shared: boolean;
+  invite_token: string | null;
+  created_at: string;
+}
+
+interface TaskListMember {
   id: string;
   user_id: string;
   user_email: string;
   role: string;
 }
 
-type Category = 'お使い' | 'イベント' | 'その他';
-
-const CATEGORIES: Category[] = ['お使い', 'イベント', 'その他'];
-
 export default function Home() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<Category>('お使い');
-  const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState('');
   const [mounted, setMounted] = useState(false);
-  const [groupId, setGroupId] = useState<string | null>(null);
-  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
-  const [showShareModal, setShowShareModal] = useState(false);
+  const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [userId, setUserId] = useState('');
+  
+  // タブ切り替え
+  const [activeTab, setActiveTab] = useState<'my' | 'shared'>('my');
+  
+  // リスト関連
+  const [taskLists, setTaskLists] = useState<TaskList[]>([]);
+  const [tasksMap, setTasksMap] = useState<Record<string, Task[]>>({});
+  const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+  
+  // 入力関連
+  const [newTaskInputs, setNewTaskInputs] = useState<Record<string, string>>({});
+  const [newListName, setNewListName] = useState('');
+  const [showNewListInput, setShowNewListInput] = useState(false);
+  
+  // 共有モーダル
+  const [shareModalListId, setShareModalListId] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
-  const router = useRouter();
   
-  const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
+  // ローディング
+  const [loading, setLoading] = useState(true);
+  
+  const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
@@ -58,7 +75,7 @@ export default function Home() {
     
     initializeUser();
     
-    const unsubscribe = subscribeToTasks();
+    const unsubscribe = subscribeToChanges();
     
     return () => {
       if (unsubscribe) unsubscribe();
@@ -69,150 +86,71 @@ export default function Home() {
     if (!supabase) return;
     
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      router.push('/login');
+      return;
+    }
     
     setUserEmail(user.email || '');
+    setUserId(user.id);
     
-    // ユーザーのグループを取得または作成
-    await ensureUserGroup(user.id);
+    await fetchTaskLists();
   };
 
-  const ensureUserGroup = async (userId: string) => {
+  const fetchTaskLists = async () => {
     if (!supabase) return;
+    
+    setLoading(true);
+    
+    // タスクリストを取得
+    const { data: lists, error: listsError } = await supabase
+      .from('task_lists')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    const { data: { user } } = await supabase.auth.getUser();
-    const userEmail = user?.email || '';
-
-    console.log('ensureUserGroup開始:', userId);
-
-    // 既存のグループメンバーシップを確認（複数の可能性あり）
-    const { data: memberships, error: membershipError } = await supabase
-      .from('group_members')
-      .select('group_id, user_email, role, groups(name)')
-      .eq('user_id', userId)
-      .order('joined_at', { ascending: false }); // 最新のグループを優先
-
-    if (membershipError) {
-      console.error('メンバーシップ取得エラー:', membershipError);
+    if (listsError) {
+      console.error('リスト取得エラー:', listsError);
+      setLoading(false);
       return;
     }
 
-    console.log('取得したメンバーシップ:', memberships);
+    setTaskLists(lists || []);
 
-    if (memberships && memberships.length > 0) {
-      // 最新のグループを使用
-      const membership = memberships[0];
+    // 各リストのタスクを取得
+    if (lists && lists.length > 0) {
+      const tasksPromises = lists.map(async (list) => {
+        const { data: tasks } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('task_list_id', list.id)
+          .order('created_at', { ascending: false });
+        
+        return { listId: list.id, tasks: tasks || [] };
+      });
+
+      const tasksResults = await Promise.all(tasksPromises);
+      const newTasksMap: Record<string, Task[]> = {};
+      tasksResults.forEach(({ listId, tasks }) => {
+        newTasksMap[listId] = tasks;
+      });
       
-      // user_emailが空の場合は更新
-      if (!membership.user_email && userEmail) {
-        await supabase
-          .from('group_members')
-          .update({ user_email: userEmail })
-          .eq('user_id', userId)
-          .eq('group_id', membership.group_id);
-      }
-      
-      console.log('既存グループを使用:', membership.group_id);
-      setGroupId(membership.group_id);
-      fetchTasks(membership.group_id);
-      fetchGroupMembers(membership.group_id);
-    } else {
-      // グループがない場合は作成
-      console.log('新しいグループを作成中...');
-      const { data: newGroup, error: groupError } = await supabase
-        .from('groups')
-        .insert({ created_by: userId, name: '私のグループ' })
-        .select()
-        .single();
-
-      if (groupError) {
-        console.error('グループ作成エラー:', groupError);
-        return;
-      }
-
-      console.log('作成したグループ:', newGroup.id);
-
-      // グループメンバーとして追加
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({ 
-          group_id: newGroup.id, 
-          user_id: userId, 
-          user_email: userEmail,
-          role: 'owner' 
-        });
-
-      if (memberError) {
-        console.error('メンバー追加エラー:', memberError);
-        return;
-      }
-
-      console.log('グループメンバーとして追加完了');
-      setGroupId(newGroup.id);
-      fetchTasks(newGroup.id);
-      fetchGroupMembers(newGroup.id);
+      setTasksMap(newTasksMap);
     }
-  };
-
-  const fetchUser = async () => {
-    if (!supabase) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.email) {
-      setUserEmail(user.email);
-    }
-  };
-
-  const fetchTasks = async (gId?: string) => {
-    if (!supabase) return;
-    const currentGroupId = gId || groupId;
-    if (!currentGroupId) return;
     
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('group_id', currentGroupId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('タスク取得エラー:', error);
-    } else {
-      setTasks(data || []);
-    }
     setLoading(false);
   };
 
-  const fetchGroupMembers = async (gId: string) => {
-    if (!supabase) return;
-    
-    const { data, error } = await supabase
-      .from('group_members')
-      .select('id, user_id, user_email, role')
-      .eq('group_id', gId);
-
-    if (error) {
-      console.error('メンバー取得エラー:', error);
-    } else {
-      setGroupMembers(data || []);
-    }
-  };
-
-  const subscribeToTasks = () => {
+  const subscribeToChanges = () => {
     if (!supabase) return;
     
     const channel = supabase
-      .channel('tasks_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks',
-        },
-        () => {
-          fetchTasks();
-        }
-      )
+      .channel('all_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_lists' }, () => {
+        fetchTaskLists();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchTaskLists();
+      })
       .subscribe();
 
     return () => {
@@ -220,52 +158,81 @@ export default function Home() {
     };
   };
 
-  const addTask = async () => {
-    if (!supabase || inputValue.trim() === '' || !groupId) return;
+  const createNewList = async () => {
+    if (!supabase || !newListName.trim() || !userId) return;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const { data, error } = await supabase
+      .from('task_lists')
+      .insert({
+        name: newListName,
+        owner_id: userId,
+        is_shared: false,
+      })
+      .select()
+      .single();
 
-    const tempId = `temp-${Date.now()}`;
-    const newTask: Task = {
-      id: tempId,
-      title: inputValue,
-      category: selectedCategory,
-      is_completed: false,
-      user_id: user.id,
-      group_id: groupId,
-      created_at: new Date().toISOString(),
-    };
+    if (error) {
+      console.error('リスト作成エラー:', error);
+      return;
+    }
 
-    setTasks([newTask, ...tasks]);
-    setInputValue('');
+    if (data) {
+      // オーナーとしてメンバーに追加
+      await supabase
+        .from('task_list_members')
+        .insert({
+          task_list_id: data.id,
+          user_id: userId,
+          user_email: userEmail,
+          role: 'owner',
+        });
+    }
 
-    const { data, error } = await supabase.from('tasks').insert([
-      {
-        title: newTask.title,
-        category: selectedCategory,
+    setNewListName('');
+    setShowNewListInput(false);
+    fetchTaskLists();
+  };
+
+  const addTask = async (listId: string) => {
+    if (!supabase || !newTaskInputs[listId]?.trim() || !userId) return;
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({
+        title: newTaskInputs[listId],
+        task_list_id: listId,
         is_completed: false,
-        user_id: user.id,
-        group_id: groupId,
-      },
-    ]).select();
+        user_id: userId,
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('タスク追加エラー:', error);
-      setTasks(tasks.filter(t => t.id !== tempId));
-    } else if (data && data[0]) {
-      setTasks(prevTasks => 
-        prevTasks.map(t => t.id === tempId ? data[0] : t)
-      );
+      return;
     }
+
+    // 即座にUIを更新
+    if (data) {
+      setTasksMap(prev => ({
+        ...prev,
+        [listId]: [data, ...(prev[listId] || [])],
+      }));
+    }
+
+    setNewTaskInputs(prev => ({ ...prev, [listId]: '' }));
   };
 
   const toggleTask = async (task: Task) => {
     if (!supabase) return;
 
-    setTasks(tasks.map(t => 
-      t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
-    ));
+    // 楽観的更新
+    setTasksMap(prev => ({
+      ...prev,
+      [task.task_list_id]: prev[task.task_list_id].map(t =>
+        t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
+      ),
+    }));
 
     const { error } = await supabase
       .from('tasks')
@@ -274,52 +241,80 @@ export default function Home() {
 
     if (error) {
       console.error('タスク更新エラー:', error);
-      setTasks(tasks.map(t => 
-        t.id === task.id ? task : t
-      ));
+      // エラー時は元に戻す
+      fetchTaskLists();
     }
   };
 
-  const deleteTask = async (id: string) => {
+  const deleteTask = async (task: Task) => {
     if (!supabase) return;
 
-    const taskToDelete = tasks.find(t => t.id === id);
-    setTasks(tasks.filter(t => t.id !== id));
+    // 楽観的更新
+    setTasksMap(prev => ({
+      ...prev,
+      [task.task_list_id]: prev[task.task_list_id].filter(t => t.id !== task.id),
+    }));
 
-    const { error } = await supabase.from('tasks').delete().eq('id', id);
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', task.id);
 
     if (error) {
       console.error('タスク削除エラー:', error);
-      if (taskToDelete) {
-        setTasks([...tasks]);
-      }
+      fetchTaskLists();
     }
   };
 
-  const generateInviteLink = async () => {
-    if (!supabase || !groupId) return;
-
-    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+  const deleteList = async (listId: string) => {
+    if (!supabase) return;
+    if (!confirm('このリストを削除しますか？リスト内のタスクも全て削除されます。')) return;
 
     const { error } = await supabase
-      .from('invite_tokens')
-      .insert({
-        group_id: groupId,
-        token: token,
-        created_by: user.id,
-      });
+      .from('task_lists')
+      .delete()
+      .eq('id', listId);
 
     if (error) {
-      console.error('招待リンク生成エラー:', error);
+      console.error('リスト削除エラー:', error);
+    } else {
+      fetchTaskLists();
+    }
+  };
+
+  const generateShareLink = async (listId: string) => {
+    if (!supabase) return;
+
+    const list = taskLists.find(l => l.id === listId);
+    
+    // 既にトークンがある場合はそれを使用
+    if (list?.invite_token) {
+      const link = `${window.location.origin}/join/${list.invite_token}`;
+      setInviteLink(link);
+      setShareModalListId(listId);
+      return;
+    }
+
+    // 新しいトークンを生成
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    
+    const { error } = await supabase
+      .from('task_lists')
+      .update({ 
+        invite_token: token,
+        is_shared: true 
+      })
+      .eq('id', listId);
+
+    if (error) {
+      console.error('共有リンク生成エラー:', error);
       return;
     }
 
     const link = `${window.location.origin}/join/${token}`;
     setInviteLink(link);
-    setShowShareModal(true);
+    setShareModalListId(listId);
+    fetchTaskLists();
   };
 
   const copyToClipboard = async () => {
@@ -332,6 +327,18 @@ export default function Home() {
     }
   };
 
+  const toggleList = (listId: string) => {
+    setExpandedLists(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(listId)) {
+        newSet.delete(listId);
+      } else {
+        newSet.add(listId);
+      }
+      return newSet;
+    });
+  };
+
   const handleLogout = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -339,20 +346,14 @@ export default function Home() {
     router.refresh();
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      addTask();
+  // フィルタリング
+  const filteredLists = taskLists.filter(list => {
+    if (activeTab === 'my') {
+      return list.owner_id === userId || !list.is_shared;
+    } else {
+      return list.is_shared;
     }
-  };
-
-  const groupedTasks = {
-    'お使い': tasks.filter((t) => t.category === 'お使い'),
-    'イベント': tasks.filter((t) => t.category === 'イベント'),
-    'その他': tasks.filter((t) => t.category === 'その他'),
-  };
-
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.is_completed).length;
+  });
 
   if (!mounted || !supabase) {
     return (
@@ -368,203 +369,234 @@ export default function Home() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-2xl font-bold text-gray-900">
-              家族のToDo
-            </h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={generateInviteLink}
-                className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                  <path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
-                </svg>
-                共有
-              </button>
-              <button
-                onClick={handleLogout}
-                className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                ログアウト
-              </button>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-900">家族のToDo</h1>
+            <button
+              onClick={handleLogout}
+              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              ログアウト
+            </button>
           </div>
-          {userEmail && (
-            <p className="text-xs text-gray-500">{userEmail}</p>
-          )}
-          {groupMembers.length > 1 && (
-            <p className="text-xs text-gray-500 mt-1">
-              👥 {groupMembers.length}人で共有中
-            </p>
-          )}
+          {userEmail && <p className="text-xs text-gray-500">{userEmail}</p>}
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 pt-6">
-        {/* タスク追加フォーム */}
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              {CATEGORIES.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all ${
-                    selectedCategory === category
-                      ? 'bg-gray-800 text-white shadow-md'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="新しいタスクを入力..."
-                className="flex-1 px-4 py-3.5 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent placeholder:text-gray-500"
-              />
-              <button
-                onClick={addTask}
-                className="px-6 py-3.5 bg-gray-800 text-white rounded-lg hover:bg-gray-700 active:bg-gray-900 transition-colors font-medium text-base shadow-sm"
-              >
-                追加
-              </button>
-            </div>
-          </div>
+        {/* タブ切り替え */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setActiveTab('my')}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all ${
+              activeTab === 'my'
+                ? 'bg-gray-800 text-white shadow-md'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            📋 マイタスクリスト
+          </button>
+          <button
+            onClick={() => setActiveTab('shared')}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all ${
+              activeTab === 'shared'
+                ? 'bg-gray-800 text-white shadow-md'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            👥 共有タスクリスト
+          </button>
         </div>
 
-        {/* 統計情報 */}
-        {totalTasks > 0 && (
-          <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-            <div className="flex justify-around text-center">
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{totalTasks}</p>
-                <p className="text-xs text-gray-500 mt-1">合計</p>
-              </div>
-              <div className="border-l border-gray-200"></div>
-              <div>
-                <p className="text-2xl font-bold text-green-600">{completedTasks}</p>
-                <p className="text-xs text-gray-500 mt-1">完了</p>
-              </div>
-              <div className="border-l border-gray-200"></div>
-              <div>
-                <p className="text-2xl font-bold text-blue-600">{totalTasks - completedTasks}</p>
-                <p className="text-xs text-gray-500 mt-1">未完了</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* タスクリスト */}
+        {/* リスト一覧 */}
         {loading ? (
           <div className="text-center py-12 text-gray-400">
             <p>読み込み中...</p>
           </div>
-        ) : totalTasks === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-            <p className="text-lg text-gray-400 mb-2">タスクがありません</p>
-            <p className="text-sm text-gray-400">上のフォームから新しいタスクを追加してください</p>
+        ) : filteredLists.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm p-8 text-center mb-4">
+            <p className="text-lg text-gray-400 mb-2">
+              {activeTab === 'my' ? 'タスクリストがありません' : '共有されているリストがありません'}
+            </p>
+            <p className="text-sm text-gray-400">
+              {activeTab === 'my' ? '下のボタンから新しいリストを作成してください' : '誰かがリストを共有するまで待ちましょう'}
+            </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {CATEGORIES.map((category) => {
-              const categoryTasks = groupedTasks[category];
-              if (categoryTasks.length === 0) return null;
+          <div className="space-y-3 mb-4">
+            {filteredLists.map((list) => {
+              const tasks = tasksMap[list.id] || [];
+              const completedCount = tasks.filter(t => t.is_completed).length;
+              const isExpanded = expandedLists.has(list.id);
 
               return (
-                <div key={category} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                    <h2 className="font-semibold text-gray-900 flex items-center justify-between">
-                      <span>{category}</span>
-                      <span className="text-sm font-normal text-gray-500">
-                        {categoryTasks.filter(t => !t.is_completed).length} / {categoryTasks.length}
-                      </span>
-                    </h2>
+                <div key={list.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                  {/* リストヘッダー */}
+                  <div
+                    onClick={() => toggleList(list.id)}
+                    className="px-4 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <span className="text-xl">{isExpanded ? '▼' : '▶'}</span>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                          {list.name}
+                          {list.is_shared && <span className="text-sm">👥</span>}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {completedCount}/{tasks.length} 完了
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => generateShareLink(list.id)}
+                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="共有"
+                      >
+                        <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                          <path d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                        </svg>
+                      </button>
+                      {list.owner_id === userId && (
+                        <button
+                          onClick={() => deleteList(list.id)}
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="削除"
+                        >
+                          <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <ul className="divide-y divide-gray-100">
-                    {categoryTasks.map((task) => (
-                      <li key={task.id} className="p-4 hover:bg-gray-50 transition-colors active:bg-gray-100">
-                        <div className="flex items-start gap-3">
-                          <button
-                            onClick={() => toggleTask(task)}
-                            className="flex-shrink-0 mt-0.5"
-                          >
-                            <div
-                              className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
-                                task.is_completed
-                                  ? 'bg-gray-800 border-gray-800'
-                                  : 'border-gray-300 hover:border-gray-400'
-                              }`}
-                            >
-                              {task.is_completed && (
-                                <svg
-                                  className="w-4 h-4 text-white"
-                                  fill="none"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2.5"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                          </button>
 
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-base leading-relaxed break-words ${
-                                task.is_completed
-                                  ? 'line-through text-gray-400'
-                                  : 'text-gray-900'
-                              }`}
-                            >
-                              {task.title}
-                            </p>
-                          </div>
-
+                  {/* タスク一覧（展開時） */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100">
+                      {/* タスク追加フォーム */}
+                      <div className="p-4 bg-gray-50 border-b border-gray-100">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newTaskInputs[list.id] || ''}
+                            onChange={(e) => setNewTaskInputs(prev => ({ ...prev, [list.id]: e.target.value }))}
+                            onKeyPress={(e) => e.key === 'Enter' && addTask(list.id)}
+                            placeholder="新しいタスクを入力..."
+                            className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder:text-gray-500"
+                          />
                           <button
-                            onClick={() => deleteTask(task.id)}
-                            className="flex-shrink-0 p-2 text-gray-400 hover:text-red-500 active:text-red-600 transition-colors rounded-lg hover:bg-red-50"
+                            onClick={() => addTask(list.id)}
+                            className="px-4 py-2 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
                           >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-5 w-5"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
+                            追加
                           </button>
                         </div>
-                      </li>
-                    ))}
-                  </ul>
+                      </div>
+
+                      {/* タスクリスト */}
+                      {tasks.length === 0 ? (
+                        <div className="p-4 text-center text-gray-400 text-sm">
+                          タスクがありません
+                        </div>
+                      ) : (
+                        <ul className="divide-y divide-gray-100">
+                          {tasks.map((task) => (
+                            <li key={task.id} className="p-4 hover:bg-gray-50 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <button
+                                  onClick={() => toggleTask(task)}
+                                  className="flex-shrink-0 mt-0.5"
+                                >
+                                  <div
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                      task.is_completed
+                                        ? 'bg-gray-800 border-gray-800'
+                                        : 'border-gray-300 hover:border-gray-400'
+                                    }`}
+                                  >
+                                    {task.is_completed && (
+                                      <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                </button>
+                                <p className={`flex-1 text-sm ${task.is_completed ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                  {task.title}
+                                </p>
+                                <button
+                                  onClick={() => deleteTask(task)}
+                                  className="flex-shrink-0 p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                  <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path d="M6 18L18 6M6 6l12 12"></path>
+                                  </svg>
+                                </button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
+
+        {/* 新規リスト作成 */}
+        {activeTab === 'my' && (
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            {showNewListInput ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && createNewList()}
+                  placeholder="新しいリスト名..."
+                  autoFocus
+                  className="flex-1 px-4 py-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 placeholder:text-gray-500"
+                />
+                <button
+                  onClick={createNewList}
+                  className="px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                >
+                  作成
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNewListInput(false);
+                    setNewListName('');
+                  }}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  キャンセル
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewListInput(true)}
+                className="w-full py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                  <path d="M12 4v16m8-8H4"></path>
+                </svg>
+                新規タスクリストを追加
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 共有モーダル */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowShareModal(false)}>
+      {shareModalListId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShareModalListId(null)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">家族を招待</h2>
-              <button onClick={() => setShowShareModal(false)} className="text-gray-400 hover:text-gray-600">
+              <h2 className="text-xl font-bold text-gray-900">リストを共有</h2>
+              <button onClick={() => setShareModalListId(null)} className="text-gray-400 hover:text-gray-600">
                 <svg className="w-6 h-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                   <path d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
@@ -572,7 +604,7 @@ export default function Home() {
             </div>
 
             <p className="text-gray-600 mb-4 text-sm">
-              このリンクをLINEやメッセージで送信すると、家族がグループに参加できます。
+              このリンクをLINEやメッセージで送信すると、相手がこのリストに参加できます。
             </p>
 
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
@@ -580,49 +612,26 @@ export default function Home() {
               <p className="text-sm text-gray-900 break-all">{inviteLink}</p>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={copyToClipboard}
-                className="flex-1 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center justify-center gap-2"
-              >
-                {copySuccess ? (
-                  <>
-                    <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                      <path d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    コピーしました！
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                      <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                    </svg>
-                    リンクをコピー
-                  </>
-                )}
-              </button>
-            </div>
-
-            {groupMembers.length > 0 && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">メンバー ({groupMembers.length}人)</h3>
-                <div className="space-y-2">
-                  {groupMembers.map((member) => (
-                    <div key={member.id} className="flex items-center gap-2 text-sm">
-                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-gray-600 font-medium">
-                          {member.user_email?.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <span className="text-gray-700">{member.user_email}</span>
-                      {member.role === 'owner' && (
-                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">オーナー</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <button
+              onClick={copyToClipboard}
+              className="w-full py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium flex items-center justify-center gap-2"
+            >
+              {copySuccess ? (
+                <>
+                  <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                    <path d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  コピーしました！
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                    <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                  </svg>
+                  リンクをコピー
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}

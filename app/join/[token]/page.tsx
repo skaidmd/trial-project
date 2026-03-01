@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/src/utils/supabase/client';
 
-export default function JoinGroupPage() {
+export default function JoinTaskListPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'invalid'>('loading');
   const [message, setMessage] = useState('');
-  const [groupName, setGroupName] = useState('');
+  const [listName, setListName] = useState('');
   const router = useRouter();
   const params = useParams();
   const token = params?.token as string;
@@ -19,10 +19,10 @@ export default function JoinGroupPage() {
       return;
     }
 
-    handleJoinGroup();
+    handleJoinList();
   }, [token]);
 
-  const handleJoinGroup = async () => {
+  const handleJoinList = async () => {
     try {
       const supabase = createClient();
 
@@ -35,42 +35,41 @@ export default function JoinGroupPage() {
         return;
       }
 
-      // トークンの検証
-      const { data: inviteData, error: inviteError } = await supabase
-        .from('invite_tokens')
-        .select('*, groups(name)')
-        .eq('token', token)
-        .gt('expires_at', new Date().toISOString())
+      // トークンでタスクリストを検索
+      const { data: taskList, error: listError } = await supabase
+        .from('task_lists')
+        .select('*')
+        .eq('invite_token', token)
         .single();
 
-      if (inviteError || !inviteData) {
+      if (listError || !taskList) {
         setStatus('invalid');
-        setMessage('この招待リンクは無効または期限切れです');
+        setMessage('この招待リンクは無効です');
         return;
       }
 
-      setGroupName(inviteData.groups?.name || 'グループ');
+      setListName(taskList.name);
 
-      // 既にグループメンバーかチェック
+      // 既にメンバーかチェック
       const { data: existingMember } = await supabase
-        .from('group_members')
+        .from('task_list_members')
         .select('id')
-        .eq('group_id', inviteData.group_id)
+        .eq('task_list_id', taskList.id)
         .eq('user_id', user.id)
         .single();
 
       if (existingMember) {
         setStatus('success');
-        setMessage('既にこのグループのメンバーです！');
+        setMessage('既にこのリストのメンバーです！');
         setTimeout(() => router.push('/'), 2000);
         return;
       }
 
-      // グループに参加
+      // リストに参加
       const { error: joinError } = await supabase
-        .from('group_members')
+        .from('task_list_members')
         .insert({
-          group_id: inviteData.group_id,
+          task_list_id: taskList.id,
           user_id: user.id,
           user_email: user.email || '',
           role: 'member',
@@ -79,12 +78,12 @@ export default function JoinGroupPage() {
       if (joinError) {
         console.error('参加エラー:', joinError);
         setStatus('error');
-        setMessage('グループへの参加に失敗しました');
+        setMessage('リストへの参加に失敗しました');
         return;
       }
 
       setStatus('success');
-      setMessage('グループに参加しました！');
+      setMessage('リストに参加しました！');
       
       // 2秒後にホームへリダイレクト
       setTimeout(() => router.push('/'), 2000);
@@ -104,7 +103,7 @@ export default function JoinGroupPage() {
             <>
               <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-gray-800 mx-auto mb-4"></div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                グループに参加中...
+                リストに参加中...
               </h1>
               <p className="text-gray-600">
                 しばらくお待ちください
@@ -122,9 +121,9 @@ export default function JoinGroupPage() {
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
                 {message}
               </h1>
-              {groupName && (
+              {listName && (
                 <p className="text-gray-600 mb-4">
-                  「{groupName}」へようこそ！
+                  「{listName}」へようこそ！
                 </p>
               )}
               <p className="text-sm text-gray-500">
