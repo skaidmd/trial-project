@@ -113,24 +113,52 @@ export default function Home() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from('tasks').insert([
+    // 楽観的UI更新: データベースへの保存前に即座にUIを更新
+    const tempId = `temp-${Date.now()}`;
+    const newTask: Task = {
+      id: tempId,
+      title: inputValue,
+      category: selectedCategory,
+      is_completed: false,
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+    };
+
+    // 即座にタスクを追加して表示
+    setTasks([newTask, ...tasks]);
+    setInputValue('');
+
+    // データベースに保存
+    const { data, error } = await supabase.from('tasks').insert([
       {
-        title: inputValue,
+        title: newTask.title,
         category: selectedCategory,
         is_completed: false,
         user_id: user.id,
       },
-    ]);
+    ]).select();
 
     if (error) {
       console.error('タスク追加エラー:', error);
-    } else {
-      setInputValue('');
+      // エラー時は楽観的に追加したタスクを削除
+      setTasks(tasks.filter(t => t.id !== tempId));
+    } else if (data && data[0]) {
+      // 一時IDを実際のIDに置き換え
+      setTasks(prevTasks => 
+        prevTasks.map(t => t.id === tempId ? data[0] : t)
+      );
     }
   };
 
   const toggleTask = async (task: Task) => {
     if (!supabase) return;
+
+    // 楽観的UI更新: 即座にUIを更新
+    setTasks(tasks.map(t => 
+      t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
+    ));
+
+    // データベースを更新
     const { error } = await supabase
       .from('tasks')
       .update({ is_completed: !task.is_completed })
@@ -138,15 +166,29 @@ export default function Home() {
 
     if (error) {
       console.error('タスク更新エラー:', error);
+      // エラー時は元に戻す
+      setTasks(tasks.map(t => 
+        t.id === task.id ? task : t
+      ));
     }
   };
 
   const deleteTask = async (id: string) => {
     if (!supabase) return;
+
+    // 楽観的UI更新: 即座にUIから削除
+    const taskToDelete = tasks.find(t => t.id === id);
+    setTasks(tasks.filter(t => t.id !== id));
+
+    // データベースから削除
     const { error } = await supabase.from('tasks').delete().eq('id', id);
 
     if (error) {
       console.error('タスク削除エラー:', error);
+      // エラー時は元に戻す
+      if (taskToDelete) {
+        setTasks([...tasks]);
+      }
     }
   };
 
@@ -232,7 +274,7 @@ export default function Home() {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
                 placeholder="新しいタスクを入力..."
-                className="flex-1 px-4 py-3.5 text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent"
+                className="flex-1 px-4 py-3.5 text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent placeholder:text-gray-500"
               />
               <button
                 onClick={addTask}
