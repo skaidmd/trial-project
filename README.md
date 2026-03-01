@@ -51,13 +51,13 @@ Supabaseのダッシュボードで、SQL Editorを開き、以下の順序でSQ
 #### 4-1. 新規セットアップ（初めて構築する場合）
 
 1. Supabaseダッシュボード → SQL Editor
-2. `pivot_to_lists.sql`の内容をコピー&ペースト
+2. `database/migrations/003_pivot_to_lists.sql`の内容をコピー&ペースト
 3. 「Run」をクリックして実行
 
 これにより、以下が作成されます:
-- `task_lists`テーブル（タスクリスト情報）
+- `task_lists`テーブル（やることリスト情報）
 - `task_list_members`テーブル（リストメンバーシップ）
-- `tasks`テーブル（タスク情報）
+- `tasks`テーブル（やること情報）
 - リストベースのRLSポリシー
 
 #### 4-2. 既存アプリからの移行（旧バージョンから更新する場合）
@@ -65,7 +65,7 @@ Supabaseのダッシュボードで、SQL Editorを開き、以下の順序でSQ
 **重要**: 既に旧バージョンのアプリを使用している場合は、このマイグレーションを実行してください。
 
 1. SQL Editorで新しいクエリを開く
-2. `pivot_to_lists.sql`の内容をコピー&ペースト
+2. `database/migrations/003_pivot_to_lists.sql`の内容をコピー&ペースト
 3. 「Run」をクリックして実行
 4. 最後に以下のコマンドを実行して、既存データをマイグレート:
 
@@ -73,7 +73,12 @@ Supabaseのダッシュボードで、SQL Editorを開き、以下の順序でSQ
 SELECT migrate_categories_to_lists();
 ```
 
-これにより、既存の「お使い」「イベント」「その他」カテゴリが自動的に個別のタスクリストに変換されます。
+これにより、既存の「お使い」「イベント」「その他」カテゴリが自動的に個別のやることリストに変換されます。
+
+#### 4-3. 修正スクリプトの適用（必要に応じて）
+
+開発環境で問題が発生した場合は、`database/archive/fixes/`内のスクリプトを参照してください。
+本番環境では通常、マイグレーションファイル（`003_pivot_to_lists.sql`）のみで十分です。
 
 ### 5. 開発サーバーの起動
 
@@ -130,8 +135,8 @@ npm run dev
 
 ```
 .
-├── app/
-│   ├── page.tsx              # メイン画面（タスクリスト一覧）
+├── app/                      # Next.js App Router
+│   ├── page.tsx              # メイン画面（やることリスト一覧）
 │   ├── login/
 │   │   └── page.tsx          # ログイン・新規登録画面
 │   └── join/
@@ -143,8 +148,18 @@ npm run dev
 │           ├── client.ts     # クライアント側のSupabaseクライアント
 │           ├── server.ts     # サーバー側のSupabaseクライアント
 │           └── middleware.ts # ミドルウェア用のSupabaseクライアント
+├── database/
+│   ├── migrations/           # マイグレーションファイル（実行順）
+│   │   ├── 001_initial_schema.sql
+│   │   ├── 002_add_groups.sql
+│   │   └── 003_pivot_to_lists.sql
+│   └── archive/              # 開発中の修正スクリプト（参考用）
+│       ├── fixes/
+│       └── debug/
+├── docs/                     # ドキュメント
+│   ├── TECHNICAL_DOCUMENTATION.md
+│   └── PROJECT_IMPROVEMENTS.md
 ├── middleware.ts             # 認証ミドルウェア
-├── pivot_to_lists.sql        # リストベースのデータベーススキーマとマイグレーション
 └── .env.local                # 環境変数（gitignore対象）
 ```
 
