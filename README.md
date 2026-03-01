@@ -112,12 +112,74 @@ npm run dev
 
 ### Vercelへのデプロイ
 
-1. GitHubにリポジトリをプッシュ
-2. [Vercel](https://vercel.com)でプロジェクトをインポート
-3. 環境変数を設定:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-4. デプロイ
+#### 1. GitHubにプッシュ
+
+```bash
+git add .
+git commit -m "Add Supabase integration"
+git push origin main
+```
+
+#### 2. Vercelでプロジェクトをインポート
+
+1. [Vercel](https://vercel.com)にアクセス
+2. 「Add New...」→「Project」をクリック
+3. GitHubリポジトリを選択してインポート
+
+#### 3. 環境変数を設定（重要！）
+
+デプロイ前に、以下の環境変数を設定してください：
+
+1. Vercelのプロジェクト設定画面で「Settings」→「Environment Variables」を開く
+2. 以下の環境変数を追加:
+
+| Name | Value |
+|------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://your-project.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `your-anon-key` |
+
+**⚠️ 注意**: これらの環境変数を設定しないと、ビルドエラーが発生します。
+
+3. 環境変数の適用範囲を選択:
+   - ✅ Production
+   - ✅ Preview
+   - ✅ Development
+
+#### 4. デプロイ
+
+「Deploy」ボタンをクリックすると、自動的にビルドとデプロイが開始されます。
+
+#### 5. デプロイ後の設定
+
+デプロイが完了したら、SupabaseのダッシュボードでリダイレクトURLを設定してください:
+
+1. Supabaseダッシュボード → Authentication → URL Configuration
+2. 「Site URL」にVercelのURL（例: `https://your-app.vercel.app`）を設定
+3. 「Redirect URLs」に以下を追加:
+   - `https://your-app.vercel.app/**`
+   - `http://localhost:3000/**`（開発用）
+
+### トラブルシューティング
+
+#### ビルドエラー: "Your project's URL and API key are required"
+
+**原因**: 環境変数が設定されていません。
+
+**解決方法**:
+1. Vercelの「Settings」→「Environment Variables」で環境変数を追加
+2. 「Deployments」タブから最新のデプロイを選択し、「Redeploy」をクリック
+
+#### 新規登録後に確認メールが届かない
+
+**原因**: Supabaseのメール設定が完了していません。
+
+**解決方法（開発環境）**:
+1. Supabaseダッシュボード → Authentication → Providers → Email
+2. 「Confirm email」をオフにする（開発環境のみ）
+
+**解決方法（本番環境）**:
+1. Supabaseダッシュボード → Project Settings → Auth
+2. カスタムSMTPを設定するか、Supabaseのデフォルトメール機能を使用
 
 ## ライセンス
 

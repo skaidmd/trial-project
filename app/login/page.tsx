@@ -11,25 +11,40 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
-  // 環境変数の確認
+  // クライアントサイドでのみSupabaseクライアントを初期化
+  const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
+
   useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    setMounted(true);
     
-    console.log('Supabase設定確認:');
-    console.log('URL:', url);
-    console.log('Key:', key ? `${key.substring(0, 20)}...` : '未設定');
-    
-    if (!url || !key || url.includes('your-project') || key.includes('your-anon')) {
-      setError('Supabaseの環境変数が正しく設定されていません。.env.localを確認してください。');
+    try {
+      const client = createClient();
+      setSupabase(client);
+      
+      // 環境変数の確認
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      console.log('Supabase設定確認:');
+      console.log('URL:', url);
+      console.log('Key:', key ? `${key.substring(0, 20)}...` : '未設定');
+    } catch (err: any) {
+      console.error('Supabase初期化エラー:', err);
+      setError(err.message);
     }
   }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!supabase) {
+      setError('Supabaseクライアントが初期化されていません。環境変数を確認してください。');
+      return;
+    }
+    
     setError('');
     setSuccessMessage('');
     setLoading(true);
@@ -43,7 +58,7 @@ export default function LoginPage() {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/` : undefined,
           },
         });
         
@@ -83,6 +98,15 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // サーバーサイドレンダリング時は何も表示しない
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-400">読み込み中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
@@ -143,7 +167,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !supabase}
               className="w-full py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? '処理中...' : isSignUp ? '新規登録' : 'ログイン'}
