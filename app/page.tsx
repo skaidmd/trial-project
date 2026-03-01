@@ -17,10 +17,8 @@ interface Task {
 interface GroupMember {
   id: string;
   user_id: string;
+  user_email: string;
   role: string;
-  users?: {
-    email: string;
-  };
 }
 
 type Category = 'お使い' | 'イベント' | 'その他';
@@ -82,6 +80,9 @@ export default function Home() {
   const ensureUserGroup = async (userId: string) => {
     if (!supabase) return;
 
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email || '';
+
     // 既存のグループメンバーシップを確認
     const { data: membership } = await supabase
       .from('group_members')
@@ -109,7 +110,12 @@ export default function Home() {
       // グループメンバーとして追加
       await supabase
         .from('group_members')
-        .insert({ group_id: newGroup.id, user_id: userId, role: 'owner' });
+        .insert({ 
+          group_id: newGroup.id, 
+          user_id: userId, 
+          user_email: userEmail,
+          role: 'owner' 
+        });
 
       setGroupId(newGroup.id);
       fetchTasks(newGroup.id);
@@ -150,7 +156,7 @@ export default function Home() {
     
     const { data, error } = await supabase
       .from('group_members')
-      .select('id, user_id, role, users:user_id(email)')
+      .select('id, user_id, user_email, role')
       .eq('group_id', gId);
 
     if (error) {
@@ -574,10 +580,10 @@ export default function Home() {
                     <div key={member.id} className="flex items-center gap-2 text-sm">
                       <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                         <span className="text-gray-600 font-medium">
-                          {member.users?.email?.charAt(0).toUpperCase()}
+                          {member.user_email?.charAt(0).toUpperCase()}
                         </span>
                       </div>
-                      <span className="text-gray-700">{member.users?.email}</span>
+                      <span className="text-gray-700">{member.user_email}</span>
                       {member.role === 'owner' && (
                         <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">オーナー</span>
                       )}

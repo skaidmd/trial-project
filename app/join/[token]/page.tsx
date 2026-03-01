@@ -72,6 +72,7 @@ export default function JoinGroupPage() {
         .insert({
           group_id: inviteData.group_id,
           user_id: user.id,
+          user_email: user.email || '',
           role: 'member',
         });
 

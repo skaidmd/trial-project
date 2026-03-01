@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_email TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
   UNIQUE(group_id, user_id)
