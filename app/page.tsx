@@ -130,11 +130,13 @@ export default function Home() {
       });
 
       const membersPromises = lists.map(async (list) => {
-        const { data: members } = await supabase
-          .from('task_list_members')
-          .select('*')
-          .eq('task_list_id', list.id)
-          .order('joined_at', { ascending: true });
+        const { data: members, error: membersError } = await supabase
+          .rpc('get_task_list_members', { list_id: list.id });
+        
+        if (membersError) {
+          console.error(`メンバー取得エラー (${list.name}):`, membersError);
+          return { listId: list.id, members: [] };
+        }
         
         return { listId: list.id, members: members || [] };
       });
