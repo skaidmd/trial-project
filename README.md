@@ -1,36 +1,124 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 家族のToDoリスト
 
-## Getting Started
+家族間でシームレスに使える、セキュアな共有ToDoアプリケーションです。Next.js (App Router) とSupabaseで構築されています。
 
-First, run the development server:
+## 主な機能
+
+- 🔐 **セキュアな認証**: メールアドレスとパスワードによる認証
+- 📱 **モバイルファースト**: スマートフォンでの片手操作に最適化
+- 🏷️ **カテゴリ管理**: 「お使い」「イベント」「その他」でタスクを整理
+- 🔄 **リアルタイム同期**: 家族全員のタスクがリアルタイムに同期
+- 🔒 **RLS（Row Level Security）**: 認証済みユーザーのみがデータにアクセス可能
+
+## セットアップ手順
+
+### 1. 依存関係のインストール
+
+```bash
+npm install
+```
+
+### 2. Supabaseプロジェクトの作成
+
+1. [Supabase](https://supabase.com)にアクセスし、新しいプロジェクトを作成
+2. プロジェクトの設定画面から以下の情報を取得:
+   - Project URL
+   - Anon Key
+
+### 3. 環境変数の設定
+
+`.env.local.example`を`.env.local`にコピーし、Supabaseの認証情報を設定してください:
+
+```bash
+cp .env.local.example .env.local
+```
+
+`.env.local`を編集:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### 4. データベーススキーマの適用
+
+Supabaseのダッシュボードで、SQL Editorを開き、`schema.sql`の内容を実行してください:
+
+1. Supabaseダッシュボード → SQL Editor
+2. `schema.sql`の内容をコピー&ペースト
+3. 「Run」をクリックして実行
+
+これにより、`tasks`テーブルとRLSポリシーが作成されます。
+
+### 5. 開発サーバーの起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000) をブラウザで開いてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 使い方
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 初回利用
 
-## Learn More
+1. `/login`にアクセス
+2. 「新規登録」をクリック
+3. メールアドレスとパスワードを入力して登録
+4. 確認メールが届くので、リンクをクリックして認証を完了
 
-To learn more about Next.js, take a look at the following resources:
+### タスクの管理
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **追加**: カテゴリを選択し、タスク名を入力して「追加」ボタンをクリック
+- **完了**: チェックボックスをタップして完了/未完了を切り替え
+- **削除**: ゴミ箱アイコンをタップしてタスクを削除
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 家族での共有
 
-## Deploy on Vercel
+現在の実装では、各ユーザーが自分のタスクのみを管理できます。家族全員でタスクを共有したい場合は、以下の方法があります:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **同じアカウントでログイン**: 全員が同じメールアドレス/パスワードでログイン
+2. **カスタマイズ**: RLSポリシーを変更して、特定のグループ内でタスクを共有
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 技術スタック
+
+- **フロントエンド**: Next.js 15 (App Router), React, TypeScript
+- **スタイリング**: Tailwind CSS
+- **バックエンド**: Supabase (PostgreSQL, Authentication, Realtime)
+- **認証**: Supabase Auth
+- **データベース**: PostgreSQL with Row Level Security
+
+## プロジェクト構成
+
+```
+.
+├── app/
+│   ├── page.tsx          # メインのToDoリスト画面
+│   ├── login/
+│   │   └── page.tsx      # ログイン/新規登録画面
+│   └── layout.tsx
+├── src/
+│   └── utils/
+│       └── supabase/     # Supabaseクライアント
+│           ├── client.ts    # クライアント側
+│           ├── server.ts    # サーバー側
+│           └── middleware.ts # ミドルウェア用
+├── middleware.ts         # 認証チェック
+├── schema.sql            # データベーススキーマ
+└── .env.local.example    # 環境変数テンプレート
+```
+
+## デプロイ
+
+### Vercelへのデプロイ
+
+1. GitHubにリポジトリをプッシュ
+2. [Vercel](https://vercel.com)でプロジェクトをインポート
+3. 環境変数を設定:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. デプロイ
+
+## ライセンス
+
+MIT
