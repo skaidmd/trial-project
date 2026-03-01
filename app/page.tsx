@@ -29,16 +29,39 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<Category>('お使い');
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState('');
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
+  
+  // クライアントサイドでのみSupabaseクライアントを初期化
+  const [supabase, setSupabase] = useState<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+    
+    try {
+      const client = createClient();
+      setSupabase(client);
+    } catch (err: any) {
+      console.error('Supabase初期化エラー:', err);
+      // 環境変数が未設定の場合はログインページへ
+      router.push('/login');
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    
     fetchTasks();
-    subscribeToTasks();
+    const unsubscribe = subscribeToTasks();
     fetchUser();
-  }, []);
+    
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [supabase]);
 
   const fetchUser = async () => {
+    if (!supabase) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (user?.email) {
       setUserEmail(user.email);
@@ -46,6 +69,7 @@ export default function Home() {
   };
 
   const fetchTasks = async () => {
+    if (!supabase) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('tasks')
@@ -61,6 +85,8 @@ export default function Home() {
   };
 
   const subscribeToTasks = () => {
+    if (!supabase) return;
+    
     const channel = supabase
       .channel('tasks_changes')
       .on(
@@ -82,7 +108,7 @@ export default function Home() {
   };
 
   const addTask = async () => {
-    if (inputValue.trim() === '') return;
+    if (!supabase || inputValue.trim() === '') return;
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -104,6 +130,7 @@ export default function Home() {
   };
 
   const toggleTask = async (task: Task) => {
+    if (!supabase) return;
     const { error } = await supabase
       .from('tasks')
       .update({ is_completed: !task.is_completed })
@@ -115,6 +142,7 @@ export default function Home() {
   };
 
   const deleteTask = async (id: string) => {
+    if (!supabase) return;
     const { error } = await supabase.from('tasks').delete().eq('id', id);
 
     if (error) {
@@ -123,6 +151,7 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     router.push('/login');
     router.refresh();
@@ -142,6 +171,15 @@ export default function Home() {
 
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.is_completed).length;
+
+  // サーバーサイドレンダリング時やSupabase初期化前は何も表示しない
+  if (!mounted || !supabase) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-400">読み込み中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
