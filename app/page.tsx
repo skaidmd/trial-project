@@ -83,27 +83,42 @@ export default function Home() {
     const { data: { user } } = await supabase.auth.getUser();
     const userEmail = user?.email || '';
 
-    // 既存のグループメンバーシップを確認
-    const { data: membership } = await supabase
-      .from('group_members')
-      .select('group_id, user_email, groups(name)')
-      .eq('user_id', userId)
-      .single();
+    console.log('ensureUserGroup開始:', userId);
 
-    if (membership) {
+    // 既存のグループメンバーシップを確認（複数の可能性あり）
+    const { data: memberships, error: membershipError } = await supabase
+      .from('group_members')
+      .select('group_id, user_email, role, groups(name)')
+      .eq('user_id', userId)
+      .order('joined_at', { ascending: false }); // 最新のグループを優先
+
+    if (membershipError) {
+      console.error('メンバーシップ取得エラー:', membershipError);
+      return;
+    }
+
+    console.log('取得したメンバーシップ:', memberships);
+
+    if (memberships && memberships.length > 0) {
+      // 最新のグループを使用
+      const membership = memberships[0];
+      
       // user_emailが空の場合は更新
       if (!membership.user_email && userEmail) {
         await supabase
           .from('group_members')
           .update({ user_email: userEmail })
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('group_id', membership.group_id);
       }
       
+      console.log('既存グループを使用:', membership.group_id);
       setGroupId(membership.group_id);
       fetchTasks(membership.group_id);
       fetchGroupMembers(membership.group_id);
     } else {
       // グループがない場合は作成
+      console.log('新しいグループを作成中...');
       const { data: newGroup, error: groupError } = await supabase
         .from('groups')
         .insert({ created_by: userId, name: '私のグループ' })
@@ -115,8 +130,10 @@ export default function Home() {
         return;
       }
 
+      console.log('作成したグループ:', newGroup.id);
+
       // グループメンバーとして追加
-      await supabase
+      const { error: memberError } = await supabase
         .from('group_members')
         .insert({ 
           group_id: newGroup.id, 
@@ -125,6 +142,12 @@ export default function Home() {
           role: 'owner' 
         });
 
+      if (memberError) {
+        console.error('メンバー追加エラー:', memberError);
+        return;
+      }
+
+      console.log('グループメンバーとして追加完了');
       setGroupId(newGroup.id);
       fetchTasks(newGroup.id);
       fetchGroupMembers(newGroup.id);
