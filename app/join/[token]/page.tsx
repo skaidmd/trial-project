@@ -35,18 +35,18 @@ export default function JoinTaskListPage() {
         return;
       }
 
-      // トークンでタスクリストを検索
-      const { data: taskList, error: listError } = await supabase
-        .from('task_lists')
-        .select('*')
-        .eq('invite_token', token)
-        .single();
+      // トークンでタスクリストを検索（SECURITY DEFINER関数を使用）
+      const { data: taskListData, error: listError } = await supabase
+        .rpc('get_task_list_by_invite_token', { token });
 
-      if (listError || !taskList) {
+      if (listError || !taskListData || taskListData.length === 0) {
+        console.error('リスト取得エラー:', listError);
         setStatus('invalid');
         setMessage('この招待リンクは無効です');
         return;
       }
+
+      const taskList = taskListData[0];
 
       setListName(taskList.name);
 

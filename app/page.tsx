@@ -41,6 +41,7 @@ export default function Home() {
   // リスト関連
   const [taskLists, setTaskLists] = useState<TaskList[]>([]);
   const [tasksMap, setTasksMap] = useState<Record<string, Task[]>>({});
+  const [membersMap, setMembersMap] = useState<Record<string, TaskListMember[]>>({});
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
   
   // 入力関連
@@ -116,7 +117,7 @@ export default function Home() {
 
     setTaskLists(lists || []);
 
-    // 各リストのタスクを取得
+    // 各リストのタスクとメンバーを取得
     if (lists && lists.length > 0) {
       const tasksPromises = lists.map(async (list) => {
         const { data: tasks } = await supabase
@@ -128,13 +129,33 @@ export default function Home() {
         return { listId: list.id, tasks: tasks || [] };
       });
 
-      const tasksResults = await Promise.all(tasksPromises);
+      const membersPromises = lists.map(async (list) => {
+        const { data: members } = await supabase
+          .from('task_list_members')
+          .select('*')
+          .eq('task_list_id', list.id)
+          .order('joined_at', { ascending: true });
+        
+        return { listId: list.id, members: members || [] };
+      });
+
+      const [tasksResults, membersResults] = await Promise.all([
+        Promise.all(tasksPromises),
+        Promise.all(membersPromises)
+      ]);
+      
       const newTasksMap: Record<string, Task[]> = {};
       tasksResults.forEach(({ listId, tasks }) => {
         newTasksMap[listId] = tasks;
       });
       
+      const newMembersMap: Record<string, TaskListMember[]> = {};
+      membersResults.forEach(({ listId, members }) => {
+        newMembersMap[listId] = members;
+      });
+      
       setTasksMap(newTasksMap);
+      setMembersMap(newMembersMap);
     }
     
     setLoading(false);
@@ -149,6 +170,9 @@ export default function Home() {
         fetchTaskLists();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchTaskLists();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_list_members' }, () => {
         fetchTaskLists();
       })
       .subscribe();
@@ -473,6 +497,29 @@ export default function Home() {
                   {/* タスク一覧（展開時） */}
                   {isExpanded && (
                     <div className="border-t border-gray-100">
+                      {/* メンバー一覧（共有リストの場合） */}
+                      {list.is_shared && membersMap[list.id] && membersMap[list.id].length > 0 && (
+                        <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+                          <p className="text-xs font-semibold text-blue-900 mb-2">共有メンバー</p>
+                          <div className="flex flex-wrap gap-2">
+                            {membersMap[list.id].map((member) => (
+                              <span
+                                key={member.id}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-blue-200 rounded-full text-xs text-blue-900"
+                              >
+                                <svg className="w-3 h-3" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                                {member.user_email}
+                                {member.role === 'owner' && (
+                                  <span className="ml-1 text-blue-600 font-semibold">★</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* タスク追加フォーム */}
                       <div className="p-4 bg-gray-50 border-b border-gray-100">
                         <div className="flex gap-2">
