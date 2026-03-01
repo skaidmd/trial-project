@@ -131,7 +131,7 @@ export default function Home() {
 
       const membersPromises = lists.map(async (list) => {
         const { data: members, error: membersError } = await supabase
-          .rpc('get_task_list_members', { list_id: list.id });
+          .rpc('get_task_list_members', { p_list_id: list.id });
         
         if (membersError) {
           console.error(`メンバー取得エラー (${list.name}):`, membersError);
