@@ -114,7 +114,7 @@ export default function LoginPage() {
         <div className="bg-white rounded-lg shadow-sm p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              家族のToDoリスト
+              連絡帳
             </h1>
             <p className="text-gray-600">
               {isSignUp ? 'アカウントを作成' : 'ログイン'}

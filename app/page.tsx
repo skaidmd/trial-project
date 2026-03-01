@@ -418,7 +418,7 @@ export default function Home() {
                 : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            📋 マイやることリスト
+            📋 自分のやること
           </button>
           <button
             onClick={() => setActiveTab('shared')}
@@ -428,7 +428,7 @@ export default function Home() {
                 : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            👥 共有やることリスト
+            👥 誰かとやること
           </button>
         </div>
 
