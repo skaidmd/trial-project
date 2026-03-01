@@ -86,11 +86,19 @@ export default function Home() {
     // 既存のグループメンバーシップを確認
     const { data: membership } = await supabase
       .from('group_members')
-      .select('group_id, groups(name)')
+      .select('group_id, user_email, groups(name)')
       .eq('user_id', userId)
       .single();
 
     if (membership) {
+      // user_emailが空の場合は更新
+      if (!membership.user_email && userEmail) {
+        await supabase
+          .from('group_members')
+          .update({ user_email: userEmail })
+          .eq('user_id', userId);
+      }
+      
       setGroupId(membership.group_id);
       fetchTasks(membership.group_id);
       fetchGroupMembers(membership.group_id);
